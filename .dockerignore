@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-server
+build
+build-production
+build-release
+.worktrees
+*.db
+*.db-shm
+*.db-wal
+Proof.xcodeproj
+Proof/
+plans/
+docs/*
+!docs/agent-docs.md
+.git

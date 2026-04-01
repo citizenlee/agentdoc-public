@@ -1,0 +1,8 @@
+{
+  "name": "@agentdoc/sqlite",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "AgentDoc SDK SQLite-backed document storage adapters",
+  "exports": "./src/index.ts"
+}

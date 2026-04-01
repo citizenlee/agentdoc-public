@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js" integrity="sha384-H+hy9ULve6xfxRkWIh/YOtvDdpXgV2fmAGQkIDTxIgZwNoaoBal14Di2YTMR6MzR" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/turndown@7.2.0/dist/turndown.js" integrity="sha384-OGauEFaI5hnS8jXK4qdSGShAUAObMBKoLXgcL1ORhRh7ulx5jPZH35qVpacIEA4Z" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js" integrity="sha384-2TroN1N6OfLQ+K4qttptnIfMREzUlMa3hW/nZqDZXv7Sm9BkESfGEupDEqCbzyRl" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid #f0f0f0;
+      z-index: 10;
+    }
+    .back-link {
+      text-decoration: none; color: #888; font-size: 13px;
+      margin-right: 12px; display: flex; align-items: center; gap: 4px;
+    }
+    .back-link:hover { color: #1a1a1a; }
+    .header-title {
+      font-size: 14px; font-weight: 600; color: #1a1a1a;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 300px;
+    }
+    .status { font-size: 12px; color: #bbb; margin-left: 12px; }
+    .doc-author { font-size: 11px; color: #aaa; margin-left: 8px; }
+    .doc-timestamps { font-size: 10px; color: #ccc; margin-left: 8px; }
+    .btn-visibility { font-size: 11px; }
+    .btn-visibility.vis-private { background: #fef2f2; color: #ef4444; border-color: #fecaca; }
+    .btn-visibility.vis-private:hover { background: #fee2e2; border-color: #fca5a5; }
+    .btn-visibility.vis-selective { background: #fff7ed; color: #ea580c; border-color: #fed7aa; }
+    .btn-visibility.vis-selective:hover { background: #ffedd5; border-color: #fdba74; }
+    .btn-visibility.vis-shared { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+    .btn-visibility.vis-shared:hover { background: #fef3c7; border-color: #fcd34d; }
+    .btn-visibility.vis-public { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
+    .btn-visibility.vis-public:hover { background: #dcfce7; border-color: #86efac; }
+    .right { display: flex; align-items: center; gap: 6px; }
+    .btn {
+      padding: 5px 10px; border-radius: 5px;
+      border: 1px solid #e0e0e0; background: #fff;
+      cursor: pointer; font-size: 12px; color: #555;
+      transition: all 0.15s;
+    }
+    .btn:hover { background: #f7f7f7; color: #1a1a1a; }
+    .btn-share { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+    .btn-share:hover { background: #333; }
+    .btn-delete { color: #ccc; border-color: #eee; }
+    .btn-delete:hover { color: #e55; border-color: #fcc; background: #fef2f2; }
+    .viewer-avatars { display: flex; align-items: center; margin-right: 8px; }
+    .viewer-avatar {
+      width: 24px; height: 24px; border-radius: 50%; background: #e5e7eb;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 600; color: #555; border: 2px solid #fff;
+      margin-left: -6px; cursor: default; position: relative;
+    }
+    .viewer-avatar:first-child { margin-left: 0; }
+    .viewer-avatar[title]:hover { z-index: 2; transform: scale(1.15); }
+    .view-count { font-size: 11px; color: #aaa; margin-right: 8px; }
+    .confirm-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.3);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    .confirm-box {
+      background: #fff; padding: 24px; border-radius: 8px; max-width: 360px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15); text-align: center;
+    }
+    .confirm-box p { font-size: 14px; color: #333; margin-bottom: 16px; line-height: 1.5; }
+    .confirm-box .confirm-title { font-weight: 600; margin-bottom: 4px; }
+    .confirm-actions { display: flex; gap: 8px; justify-content: center; }
+    .confirm-actions button {
+      padding: 8px 16px; border-radius: 5px; font-size: 13px; cursor: pointer;
+    }
+    .confirm-cancel { border: 1px solid #ddd; background: #fff; color: #555; }
+    .confirm-cancel:hover { background: #f7f7f7; }
+    .confirm-del { border: none; background: #e55; color: #fff; }
+    .confirm-del:hover { background: #d44; }
+    main {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 32px 24px 200px;
+    }
+
+    /* Rich editor */
+    #editor {
+      width: 100%;
+      min-height: calc(100vh - 120px);
+      outline: none;
+      font-size: 15px;
+      line-height: 1.75;
+      color: #2a2a2a;
+    }
+    #editor del, #editor s { text-decoration: none; }
+    #editor:empty::before {
+      content: 'Start writing...';
+      color: #ccc;
+    }
+    #editor h1 { font-size: 1.8em; margin: 0.6em 0 0.3em; font-weight: 700; }
+    #editor h2 { font-size: 1.4em; margin: 0.5em 0 0.25em; font-weight: 600; }
+    #editor h3 { font-size: 1.15em; margin: 0.4em 0 0.2em; font-weight: 600; }
+    #editor p { margin: 0.4em 0; }
+    #editor ul, #editor ol { margin: 0.4em 0; padding-left: 1.5em; }
+    #editor li { margin: 0.15em 0; }
+    #editor blockquote {
+      border-left: 3px solid #ddd; padding-left: 12px;
+      color: #666; margin: 0.5em 0;
+    }
+    #editor pre {
+      background: #f6f6f6; padding: 12px; border-radius: 4px;
+      font-family: 'SF Mono', monospace; font-size: 13px;
+      overflow-x: auto; margin: 0.5em 0;
+    }
+    #editor code {
+      background: #f0f0f0; padding: 1px 4px; border-radius: 3px;
+      font-family: 'SF Mono', monospace; font-size: 0.9em;
+    }
+    #editor pre code { background: none; padding: 0; }
+    #editor a { color: #266854; }
+    #editor hr { border: none; border-top: 1px solid #eee; margin: 1em 0; }
+    #editor img { max-width: 100%; }
+    #editor table { border-collapse: collapse; margin: 0.5em 0; }
+    #editor th, #editor td { border: 1px solid #ddd; padding: 6px 10px; }
+    #editor .comment-hl {
+      background: rgba(255, 212, 0, 0.2);
+      border-bottom: 2px solid rgba(255, 180, 0, 0.4);
+      cursor: pointer;
+      border-radius: 2px;
+      transition: background 0.2s;
+    }
+    #editor .comment-hl:hover { background: rgba(255, 212, 0, 0.35); }
+    #editor .comment-hl.focused { background: rgba(255, 180, 0, 0.4); border-bottom-color: rgba(255, 140, 0, 0.7); }
+
+    /* Selection toolbar */
+    #selection-toolbar {
+      position: absolute; display: none;
+      background: #1a1a1a; color: #fff;
+      padding: 4px 0; border-radius: 5px;
+      font-size: 12px; z-index: 20;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      user-select: none;
+    }
+    #selection-toolbar button {
+      background: none; border: none; color: #fff;
+      padding: 4px 10px; cursor: pointer; font-size: 12px;
+      white-space: nowrap;
+    }
+    #selection-toolbar button:hover { background: rgba(255,255,255,0.15); }
+    #selection-toolbar .sep {
+      width: 1px; background: rgba(255,255,255,0.2);
+      margin: 2px 0; align-self: stretch;
+    }
+
+    /* Comments panel */
+    .comments-panel {
+      position: fixed; right: 0; top: 44px; bottom: 0;
+      width: 320px; background: #fafafa;
+      border-left: 1px solid #f0f0f0;
+      transform: translateX(100%);
+      transition: transform 0.2s ease;
+      display: flex; flex-direction: column;
+      z-index: 15;
+    }
+    .comments-panel.open { transform: translateX(0); }
+    body.comments-open main { margin-right: 320px; margin-left: 24px; max-width: none; }
+    .comments-header {
+      font-size: 12px; font-weight: 600; color: #999;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 16px 16px 8px;
+    }
+    .comments-body { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+    .comment {
+      padding: 10px; background: #fff; border: 1px solid #eee;
+      border-radius: 6px; margin-bottom: 8px; font-size: 13px; line-height: 1.5;
+    }
+    .comment-quote {
+      font-style: italic; color: #888;
+      border-left: 2px solid #ddd; padding-left: 8px;
+      margin-bottom: 6px; font-size: 12px;
+    }
+    .comment-text { color: #333; }
+    .comment-meta { font-size: 11px; color: #aaa; margin-top: 4px; }
+    .comment-actions { margin-top: 6px; display: flex; gap: 8px; }
+    .comment-action {
+      font-size: 11px; color: #888; cursor: pointer;
+      background: none; border: none; padding: 0;
+    }
+    .comment-action:hover { color: #1a1a1a; }
+    .comment.active { border-color: #ffb400; background: #fffbeb; }
+    .comment.general { border-left: 3px solid #ccc; }
+    .comment .general-label { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; }
+    .reply-thread { margin-top: 8px; padding-left: 10px; border-left: 2px solid #e8e8e8; }
+    .reply { margin-bottom: 6px; font-size: 12px; }
+    .reply-text { color: #444; }
+    .reply-meta { font-size: 11px; color: #aaa; }
+    .reply-form { display: none; margin-top: 6px; }
+    .reply-form.open { display: flex; gap: 4px; }
+    .reply-form input {
+      flex: 1; padding: 4px 6px; border: 1px solid #ddd;
+      border-radius: 4px; font-size: 11px; outline: none;
+    }
+    .reply-form input:focus { border-color: #999; }
+    .reply-form button {
+      padding: 4px 8px; border: 1px solid #ddd;
+      border-radius: 4px; background: #fff; font-size: 11px; cursor: pointer;
+    }
+    .comment-composer {
+      border-top: 1px solid #eee; padding: 12px 16px; background: #fff;
+    }
+    .composer-quote {
+      font-size: 11px; color: #888; font-style: italic;
+      border-left: 2px solid #ddd; padding-left: 8px;
+      margin-bottom: 8px; display: none;
+    }
+    .composer-quote.has-quote { display: block; }
+    .composer-row { display: flex; gap: 6px; }
+    .composer-row input {
+      flex: 1; padding: 8px 10px; border: 1px solid #e0e0e0;
+      border-radius: 5px; font-size: 13px; outline: none;
+    }
+    .composer-row input:focus { border-color: #999; }
+    .composer-row button {
+      padding: 8px 14px; border-radius: 5px;
+      border: 1px solid #1a1a1a; background: #1a1a1a; color: #fff;
+      cursor: pointer; font-size: 12px; white-space: nowrap;
+    }
+    .composer-row button:hover { background: #333; }
+    .history-panel {
+      position: fixed; right: 0; top: 44px; bottom: 0;
+      width: 320px; background: #fafafa;
+      border-left: 1px solid #f0f0f0;
+      transform: translateX(100%);
+      transition: transform 0.2s ease;
+      display: flex; flex-direction: column;
+      z-index: 15;
+    }
+    .history-panel.open { transform: translateX(0); }
+    body.history-open main { margin-right: 320px; margin-left: 24px; max-width: none; }
+    .version-item {
+      padding: 10px; background: #fff; border: 1px solid #eee;
+      border-radius: 6px; margin-bottom: 6px; font-size: 12px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .version-item:hover { border-color: #ccc; background: #f8f8f8; }
+    .version-item.previewing { border-color: #266854; background: #f0f9f6; }
+    .version-date { font-weight: 500; color: #333; }
+    .version-meta { color: #999; font-size: 11px; margin-top: 2px; }
+    .version-actions { margin-top: 6px; display: flex; gap: 6px; }
+    .version-actions button {
+      padding: 3px 8px; border-radius: 4px; font-size: 11px;
+      cursor: pointer; border: 1px solid #ddd; background: #fff; color: #555;
+    }
+    .version-actions button:hover { background: #f0f0f0; }
+    .version-actions .restore-btn { background: #266854; color: #fff; border-color: #266854; }
+    .version-actions .restore-btn:hover { background: #1d5a46; }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #1a1a1a; color: #fff;
+      padding: 8px 16px; border-radius: 6px; font-size: 13px;
+      transition: transform 0.2s ease; z-index: 100;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    /* Document Outline Sidebar */
+    .document-outline {
+      position: fixed;
+      left: 0;
+      top: 44px;
+      bottom: 0;
+      width: 220px;
+      background: #fafafa;
+      border-right: 1px solid #f0f0f0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 16px 0;
+      font-size: 13px;
+      z-index: 5;
+    }
+    .document-outline.hidden { display: none; }
+    body.has-outline main { margin-left: 220px; }
+    body.has-outline.comments-open main { margin-left: 220px; }
+    .outline-header {
+      padding: 0 16px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .outline-item {
+      display: block;
+      padding: 4px 16px;
+      color: #555;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-left: 2px solid transparent;
+      transition: background 0.1s;
+    }
+    .outline-item:hover { background: #f0f0f0; }
+    .outline-item.active { border-left-color: #1a1a1a; color: #1a1a1a; font-weight: 500; }
+    .outline-item.h1 { padding-left: 16px; font-weight: 500; }
+    .outline-item.h2 { padding-left: 28px; }
+    .outline-item.h3 { padding-left: 40px; font-size: 12px; }
+    .outline-item.h4 { padding-left: 52px; font-size: 12px; color: #888; }
+    .outline-item.h5 { padding-left: 64px; font-size: 11px; color: #888; }
+    .outline-item.h6 { padding-left: 76px; font-size: 11px; color: #888; }
+
+    /* Share modal */
+    .share-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+      display: flex; align-items: center; justify-content: center; z-index: 200;
+    }
+    .share-modal {
+      background: #fff; border-radius: 12px; width: min(480px, 90vw);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.2); overflow: hidden;
+    }
+    .share-modal-header {
+      padding: 20px 24px 0; display: flex; align-items: center; justify-content: space-between;
+    }
+    .share-modal-header h3 { font-size: 16px; font-weight: 600; margin: 0; color: #1a1a1a; }
+    .share-modal-close {
+      background: none; border: none; font-size: 18px; color: #999; cursor: pointer;
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+    }
+    .share-modal-close:hover { background: #f0f0f0; color: #333; }
+    .share-modal-body { padding: 16px 24px 24px; }
+    .share-section { margin-bottom: 20px; }
+    .share-section-label {
+      font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 8px;
+    }
+    .share-visibility-options { display: flex; flex-direction: column; gap: 6px; }
+    .share-vis-option {
+      display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+      border: 1px solid #eee; border-radius: 8px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .share-vis-option:hover { background: #fafafa; border-color: #ddd; }
+    .share-vis-option.active { border-color: #1a1a1a; background: #f8f8f8; }
+    .share-vis-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .share-vis-dot.private { background: #ef4444; }
+    .share-vis-dot.selective { background: #f97316; }
+    .share-vis-dot.shared { background: #ffd600; }
+    .share-vis-dot.public { background: #22c55e; }
+    .share-vis-label { font-size: 13px; font-weight: 500; color: #1a1a1a; }
+    .share-vis-desc { font-size: 11px; color: #999; }
+    .share-add-row {
+      display: flex; gap: 8px; position: relative;
+    }
+    .share-email-input {
+      flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px;
+      font-size: 13px; outline: none;
+    }
+    .share-email-input:focus { border-color: #999; }
+    .share-add-btn {
+      padding: 8px 16px; border-radius: 8px; border: none;
+      background: #1a1a1a; color: #fff; font-size: 13px; cursor: pointer;
+      white-space: nowrap;
+    }
+    .share-add-btn:hover { background: #333; }
+    .share-add-btn:disabled { background: #ccc; cursor: default; }
+    .share-autocomplete {
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
+      margin-top: 4px; max-height: 180px; overflow-y: auto;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1); z-index: 10;
+      display: none;
+    }
+    .share-autocomplete.open { display: block; }
+    .share-ac-item {
+      padding: 8px 12px; cursor: pointer; font-size: 13px;
+      display: flex; flex-direction: column;
+    }
+    .share-ac-item:hover { background: #f5f5f5; }
+    .share-ac-item.highlighted { background: #f0f0f0; }
+    .share-ac-name { font-weight: 500; color: #1a1a1a; }
+    .share-ac-email { font-size: 11px; color: #999; }
+    .share-people-list { margin-top: 12px; }
+    .share-person {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 0; border-bottom: 1px solid #f5f5f5;
+    }
+    .share-person:last-child { border-bottom: none; }
+    .share-person-info { display: flex; align-items: center; gap: 8px; }
+    .share-person-avatar {
+      width: 28px; height: 28px; border-radius: 50%; background: #e5e7eb;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: #555;
+    }
+    .share-person-email { font-size: 13px; color: #333; }
+    .share-person-role {
+      font-size: 11px; color: #666; padding: 2px 6px; border: 1px solid #e0e0e0;
+      border-radius: 4px; background: #fff; cursor: pointer; outline: none;
+      appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23999'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 5px center;
+      padding-right: 16px;
+    }
+    .share-person-role:hover { border-color: #ccc; }
+    .share-role-select {
+      font-size: 12px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px;
+      background: #fff; outline: none; color: #555; cursor: pointer;
+      appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23999'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 6px center;
+      padding-right: 20px;
+    }
+    .share-role-select:hover { border-color: #999; }
+    .share-person-remove {
+      background: none; border: none; font-size: 16px; color: #ccc;
+      cursor: pointer; padding: 4px 8px; border-radius: 4px;
+    }
+    .share-person-remove:hover { color: #e55; background: #fef2f2; }
+    .share-link-row {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .share-link-input {
+      flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px;
+      font-size: 12px; color: #666; background: #fafafa; outline: none;
+    }
+    .share-copy-btn {
+      padding: 8px 14px; border-radius: 8px; border: 1px solid #ddd;
+      background: #fff; font-size: 12px; cursor: pointer; color: #555;
+      white-space: nowrap;
+    }
+    .share-copy-btn:hover { background: #f5f5f5; border-color: #ccc; }
+
+    @media (max-width: 768px) {
+      main { padding: 24px 16px 200px; }
+      .comments-panel { width: 280px; }
+      body.comments-open main { margin-right: 0; }
+      .document-outline { display: none; }
+      body.has-outline main { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex;align-items:center">
+      <a href="/" class="back-link">&larr;</a>
+      <span class="header-title" id="header-title">Untitled</span>
+      <span class="doc-author" id="doc-author"></span>
+      <span class="doc-timestamps" id="doc-timestamps"></span>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="right">
+      <span id="viewer-avatars" class="viewer-avatars"></span>
+      <span id="view-count" class="view-count"></span>
+      <button class="btn btn-delete" onclick="confirmDeleteDoc()">Delete</button>
+      <button class="btn btn-visibility vis-private" id="visibility-btn" onclick="openShareModal()">Private</button>
+      <button class="btn" onclick="toggleHistory()">History</button>
+      <button class="btn" id="comments-btn" onclick="toggleComments()">Comments</button>
+      <button class="btn btn-share" onclick="openShareModal()">Share</button>
+    </div>
+  </header>
+  <nav id="document-outline" class="document-outline hidden">
+    <div class="outline-header">Outline</div>
+    <div id="outline-items"></div>
+  </nav>
+  <main>
+    <div id="editor" contenteditable="true" spellcheck="true"></div>
+  </main>
+
+  <div id="selection-toolbar">
+    <button onmousedown="formatBold(event)"><b>B</b></button>
+    <button onmousedown="formatItalic(event)"><i>I</i></button>
+    <div class="sep"></div>
+    <button onmousedown="formatList(event, 'ul')">&#8226; List</button>
+    <button onmousedown="formatList(event, 'ol')">1. List</button>
+    <div class="sep"></div>
+    <button onmousedown="startCommentFromSelection(event)">Comment</button>
+  </div>
+
+  <div class="comments-panel" id="comments-panel">
+    <div class="comments-header">Comments</div>
+    <div class="comments-body" id="comments-list"></div>
+    <div class="comment-composer">
+      <div class="composer-quote" id="composer-quote"></div>
+      <div class="composer-row">
+        <input id="comment-input" placeholder="Add a comment..." onkeydown="if(event.key==='Enter')submitComment()">
+        <button onclick="submitComment()">Send</button>
+      </div>
+    </div>
+  </div>
+  <div class="history-panel" id="history-panel">
+    <div class="comments-header">Version History</div>
+    <div class="comments-body" id="history-list"></div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const config = window.__AGENTDOC_CONFIG__ || {};
+    const slug = config.shareSlug;
+    const token = config.shareToken;
+    const editor = document.getElementById('editor');
+    const headerTitle = document.getElementById('header-title');
+    const statusEl = document.getElementById('status');
+    const toolbar = document.getElementById('selection-toolbar');
+    let saveTimeout;
+    let titleTimeout;
+    let lastSavedMarkdown = '';
+    let lastSavedTitle = '';
+    let currentRevision = null;
+    let pendingQuote = '';
+    let saving = false;
+    let docCreatedAt = '';
+
+    function updateTimestamps(updatedAt) {
+      const tsEl = document.getElementById('doc-timestamps');
+      const created = docCreatedAt ? fmtTime(docCreatedAt) : '';
+      const modified = updatedAt ? fmtTime(updatedAt) : '';
+      if (created || modified) {
+        tsEl.textContent = (created ? 'Created ' + created : '') + (modified ? ' · Modified ' + modified : '');
+      }
+    }
+
+    // Disable strikethrough rendering - single ~ in text (like ~100) triggers
+    // false positives. Render as plain text instead.
+    marked.use({ renderer: { del(text) { return text; } } });
+
+    // Turndown for HTML -> Markdown
+    const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+    td.use(turndownPluginGfm.gfm);
+    td.addRule('stripCommentHighlights', {
+      filter: (node) => node.nodeName === 'SPAN' && node.classList.contains('comment-hl'),
+      replacement: (content) => content,
+    });
+
+    function authHeaders(extra = {}) {
+      const h = {
+        'x-agentdoc-client-version': '0.30.0',
+        'x-agentdoc-client-build': 'lean-editor',
+        'x-agentdoc-client-protocol': '3',
+        ...extra,
+      };
+      if (token) h['x-share-token'] = token;
+      return h;
+    }
+
+    function getMarkdown() {
+      return td.turndown(editor.innerHTML);
+    }
+
+    // Strip ~~strikethrough~~ markdown syntax, keeping the inner text
+    function stripStrikethrough(md) {
+      return md.replace(/~~([\s\S]+?)~~/g, '$1');
+    }
+
+    // -- Selection toolbar --
+    function updateSelectionToolbar() {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !editor.contains(sel.anchorNode)) {
+        toolbar.style.display = 'none';
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0) { toolbar.style.display = 'none'; return; }
+
+      toolbar.style.display = 'flex';
+      toolbar.style.top = (rect.top + window.scrollY - 36) + 'px';
+      toolbar.style.left = (rect.left + window.scrollX + rect.width / 2 - toolbar.offsetWidth / 2) + 'px';
+    }
+
+    editor.addEventListener('mouseup', () => setTimeout(updateSelectionToolbar, 10));
+    editor.addEventListener('keyup', (e) => {
+      if (e.shiftKey) setTimeout(updateSelectionToolbar, 10);
+    });
+
+    // Track editor selections — only UPDATE pendingQuote when there's a real selection,
+    // never clear it on collapsed selections (so it persists until submit or new selection)
+    document.addEventListener('selectionchange', () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !editor.contains(sel.anchorNode)) return;
+      let quote = sel.toString();
+      if (!quote.trim()) {
+        const block = getBlockAncestor(sel.anchorNode);
+        if (block) quote = block.textContent.trim();
+      }
+      if (!quote) return;
+      pendingQuote = quote.replace(/[\u200B\u200C\u200D\uFEFF\uFFFC]/g, '').replace(/\s+/g, ' ').trim();
+      const quoteEl = document.getElementById('composer-quote');
+      quoteEl.textContent = '"' + (pendingQuote.length > 80 ? pendingQuote.substring(0, 80) + '...' : pendingQuote) + '"';
+      quoteEl.classList.add('has-quote');
+    });
+
+    function formatBold(e) {
+      e.preventDefault();
+      document.execCommand('bold');
+      editor.focus();
+    }
+    function formatItalic(e) {
+      e.preventDefault();
+      document.execCommand('italic');
+      editor.focus();
+    }
+    function formatList(e, type) {
+      e.preventDefault();
+      document.execCommand(type === 'ol' ? 'insertOrderedList' : 'insertUnorderedList');
+      editor.focus();
+    }
+
+    function getBlockAncestor(node) {
+      const blocks = ['P', 'H1', 'H2', 'H3', 'H4', 'LI', 'BLOCKQUOTE', 'PRE', 'DIV'];
+      let el = node.nodeType === 3 ? node.parentElement : node;
+      while (el && el !== editor) {
+        if (blocks.includes(el.tagName)) return el;
+        el = el.parentElement;
+      }
+      return null;
+    }
+
+    function startCommentFromSelection(e) {
+      e.preventDefault();
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) {
+        let quote = sel.toString();
+        // If selection is whitespace-only, grab the containing block's text as context
+        if (!quote.trim()) {
+          const block = getBlockAncestor(sel.anchorNode);
+          if (block) {
+            quote = block.textContent.trim();
+          }
+        }
+        pendingQuote = quote;
+      }
+      toolbar.style.display = 'none';
+
+      const panel = document.getElementById('comments-panel');
+      if (!panel.classList.contains('open')) {
+        panel.classList.add('open');
+        document.body.classList.add('comments-open');
+        loadComments();
+      }
+      const quoteEl = document.getElementById('composer-quote');
+      if (pendingQuote) {
+        quoteEl.textContent = '"' + (pendingQuote.length > 80 ? pendingQuote.substring(0, 80) + '...' : pendingQuote) + '"';
+        quoteEl.classList.add('has-quote');
+      }
+      setTimeout(() => document.getElementById('comment-input').focus(), 50);
+    }
+
+    function getH1Text() {
+      const h1 = editor.querySelector('h1');
+      return h1 ? h1.textContent.trim() : '';
+    }
+
+    function syncTitle() {
+      const title = getH1Text() || 'Untitled';
+      headerTitle.textContent = title;
+      document.title = title;
+      if (title !== lastSavedTitle) {
+        clearTimeout(titleTimeout);
+        titleTimeout = setTimeout(async () => {
+          if (!slug) return;
+          try {
+            const res = await fetch(`/documents/${slug}/title`, {
+              method: 'PUT',
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify({ title })
+            });
+            if (res.ok) {
+              lastSavedTitle = title;
+            } else {
+              console.error('title save failed:', res.status, await res.text().catch(() => ''));
+            }
+          } catch (e) { console.error('title save failed:', e); }
+        }, 500);
+      }
+    }
+
+    // Allow editing title by clicking header title (inserts/focuses H1)
+    headerTitle.style.cursor = 'pointer';
+    headerTitle.addEventListener('click', () => {
+      let h1 = editor.querySelector('h1');
+      if (!h1) {
+        // Insert H1 at the beginning
+        h1 = document.createElement('h1');
+        h1.textContent = 'Untitled';
+        editor.insertBefore(h1, editor.firstChild);
+      }
+      h1.focus();
+      // Select all text in the H1
+      const range = document.createRange();
+      range.selectNodeContents(h1);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+
+    // -- Load document --
+    async function loadDoc() {
+      if (!slug) { statusEl.textContent = 'No document'; return; }
+      try {
+        const res = await fetch(`/documents/${slug}/state`, { headers: authHeaders() });
+        if (!res.ok) throw new Error(`${res.status}`);
+        const data = await res.json();
+        const md = data.markdown || '';
+        currentRevision = data.revision || null;
+        editor.innerHTML = DOMPurify.sanitize(marked.parse(stripStrikethrough(md)));
+        // Normalize: store what turndown produces from the rendered HTML
+        // so we don't trigger a spurious save from round-trip differences
+        lastSavedMarkdown = getMarkdown();
+        lastSavedTitle = data.title || '';
+        syncTitle();
+        const author = (data.author || '').replace(/^(ai:|agent:|user:|oauth_user:|oauth:)/, '');
+        if (author) document.getElementById('doc-author').textContent = 'by ' + author;
+        docCreatedAt = data.createdAt || '';
+        updateTimestamps(data.updatedAt);
+        loadVisibility();
+        loadCommentHighlights();
+        statusEl.textContent = '';
+        editor.focus();
+      } catch (e) {
+        statusEl.textContent = 'Error loading';
+        console.error('loadDoc failed:', e);
+      }
+    }
+
+    // -- Refresh revision from server (used after stale-base errors) --
+    async function refreshRevision() {
+      try {
+        const res = await fetch(`/documents/${slug}/state`, { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        currentRevision = data.revision || currentRevision;
+      } catch (e) { /* ignore */ }
+    }
+
+    // -- Save document --
+    async function saveDoc() {
+      const md = getMarkdown();
+      if (!slug || md === lastSavedMarkdown) {
+        statusEl.textContent = '';
+        return;
+      }
+      if (saving) return;
+      saving = true;
+      try {
+        const payload = { content: md, by: getCommentAuthor() };
+        if (currentRevision != null) payload.baseRevision = currentRevision;
+        const res = await fetch(`/documents/${slug}/bridge/rewrite`, {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.revision) currentRevision = result.revision;
+          lastSavedMarkdown = md;
+          updateTimestamps(result.updatedAt || new Date().toISOString());
+          statusEl.textContent = 'Saved';
+          setTimeout(() => { if (statusEl.textContent === 'Saved') statusEl.textContent = ''; }, 1500);
+        } else if (res.status === 409) {
+          // Stale base revision — refresh and retry once
+          console.warn('Stale revision, refreshing...');
+          await refreshRevision();
+          const retryPayload = { content: md, by: getCommentAuthor() };
+          if (currentRevision != null) retryPayload.baseRevision = currentRevision;
+          const retry = await fetch(`/documents/${slug}/bridge/rewrite`, {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(retryPayload)
+          });
+          if (retry.ok) {
+            const result = await retry.json();
+            if (result.revision) currentRevision = result.revision;
+            lastSavedMarkdown = md;
+            updateTimestamps(result.updatedAt || new Date().toISOString());
+            statusEl.textContent = 'Saved';
+            setTimeout(() => { if (statusEl.textContent === 'Saved') statusEl.textContent = ''; }, 1500);
+          } else {
+            console.error('save retry failed:', retry.status);
+            statusEl.textContent = 'Save failed';
+          }
+        } else {
+          const err = await res.text();
+          console.error('save failed:', res.status, err);
+          statusEl.textContent = 'Save failed';
+        }
+      } catch (e) {
+        console.error('save error:', e);
+        statusEl.textContent = 'Save failed';
+      } finally {
+        saving = false;
+      }
+    }
+
+    editor.addEventListener('input', () => {
+      statusEl.textContent = 'Editing...';
+      syncTitle();
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(saveDoc, 800);
+    });
+
+    // Auto-detect list prefixes on Space key
+    editor.addEventListener('beforeinput', (e) => {
+      if (e.inputType !== 'insertText' || e.data !== ' ') return;
+      const sel = window.getSelection();
+      if (!sel || !sel.isCollapsed) return;
+      const node = sel.anchorNode;
+      if (!node || node.nodeType !== 3) return;
+      if (node.parentElement.closest('li,ul,ol')) return;
+      const textBefore = node.textContent.substring(0, sel.anchorOffset);
+      // Check if the text before cursor in this node is a list prefix
+      const block = getBlockAncestor(node) || node.parentElement;
+      const blockText = block ? block.textContent.substring(0, block.textContent.indexOf(textBefore) + textBefore.length) : textBefore;
+      if (/^-$/.test(blockText.trim()) || /^\*$/.test(blockText.trim())) {
+        e.preventDefault();
+        // Select all text in block and delete it, then insert list
+        const range = document.createRange();
+        range.selectNodeContents(block && block !== editor ? block : node);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('delete');
+        document.execCommand('insertUnorderedList');
+      } else if (/^1\.$/.test(blockText.trim())) {
+        e.preventDefault();
+        const range = document.createRange();
+        range.selectNodeContents(block && block !== editor ? block : node);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('delete');
+        document.execCommand('insertOrderedList');
+      }
+    });
+
+    // -- Keyboard shortcuts --
+    editor.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        clearTimeout(saveTimeout);
+        saveDoc();
+      }
+      // Backspace at start of list item: convert to plain paragraph
+      if (e.key === 'Backspace') {
+        const sel = window.getSelection();
+        if (sel && sel.isCollapsed && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          const el = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+          const li = el ? el.closest('li') : null;
+          if (li) {
+            // Check if cursor is at the very start of the li
+            const testRange = document.createRange();
+            testRange.selectNodeContents(li);
+            testRange.setEnd(range.startContainer, range.startOffset);
+            if (testRange.toString() === '') {
+              e.preventDefault();
+              const list = li.closest('ul,ol');
+              const p = document.createElement('p');
+              p.innerHTML = li.innerHTML || '<br>';
+              if (list && list.querySelectorAll('li').length <= 1) {
+                list.replaceWith(p);
+              } else {
+                list.parentNode.insertBefore(p, list);
+                li.remove();
+              }
+              // Place cursor at start of new paragraph
+              const newRange = document.createRange();
+              newRange.setStart(p.firstChild || p, 0);
+              newRange.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(newRange);
+            }
+          }
+        }
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const sel = window.getSelection();
+        const node = sel ? sel.anchorNode : null;
+        const li = node ? (node.nodeType === 3 ? node.parentElement : node).closest('li') : null;
+        if (li) {
+          // In a list: indent/outdent
+          document.execCommand(e.shiftKey ? 'outdent' : 'indent');
+        } else {
+          if (e.shiftKey) {
+            document.execCommand('outdent');
+          } else {
+            // Insert tab-like spacing (4 spaces)
+            document.execCommand('insertText', false, '    ');
+          }
+        }
+      }
+    });
+
+    // -- Share --
+    function copyLink() {
+      navigator.clipboard.writeText(window.location.href).then(() => showToast('Link copied'));
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    // -- Comments --
+    let activeCommentId = null;
+
+    function clearCommentHighlights() {
+      editor.querySelectorAll('.comment-hl').forEach(el => {
+        const parent = el.parentNode;
+        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+        parent.removeChild(el);
+      });
+      editor.normalize();
+    }
+
+    function highlightTextInEditor(quote, markId) {
+      if (!quote) return false;
+      const normalized = quote.replace(/\s+/g, ' ').trim();
+      if (!normalized) return false;
+
+      // Collect text nodes with separators between block boundaries
+      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      let fullText = '';
+      let lastParentBlock = null;
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (node.parentElement.closest('.comment-hl')) continue;
+        // Add space at block boundaries so cross-block text matches
+        const block = node.parentElement.closest('p,h1,h2,h3,h4,li,blockquote,pre,div,td,th');
+        if (lastParentBlock && block !== lastParentBlock && fullText.length > 0 && !/\s$/.test(fullText)) {
+          fullText += ' ';
+        }
+        lastParentBlock = block;
+        textNodes.push({ node, start: fullText.length });
+        fullText += node.textContent;
+      }
+
+      // Simple normalized search
+      const normalizedFull = fullText.replace(/\s+/g, ' ');
+      const idx = normalizedFull.indexOf(normalized);
+      if (idx === -1) return false;
+
+      // Map normalized index back to original index
+      let normI = 0, origStart = -1, origEnd = -1;
+      for (let oi = 0; oi < fullText.length && origEnd === -1; oi++) {
+        if (normI === idx && origStart === -1) origStart = oi;
+        if (normI === idx + normalized.length) { origEnd = oi; break; }
+        // Advance normalized pointer
+        if (/\s/.test(fullText[oi])) {
+          if (oi === 0 || !/\s/.test(fullText[oi - 1])) normI++;
+        } else {
+          normI++;
+        }
+      }
+      if (origStart === -1) return false;
+      if (origEnd === -1) origEnd = fullText.length;
+
+      // Find which text nodes the range spans and wrap each segment
+      const segments = [];
+      for (let i = 0; i < textNodes.length; i++) {
+        const tn = textNodes[i];
+        const tnEnd = tn.start + tn.node.textContent.length;
+        if (tnEnd <= origStart) continue;
+        if (tn.start >= origEnd) break;
+        const startOff = Math.max(0, origStart - tn.start);
+        const endOff = Math.min(tn.node.textContent.length, origEnd - tn.start);
+        segments.push({ node: tn.node, startOff, endOff });
+      }
+      if (segments.length === 0) return false;
+
+      // Wrap each text segment individually (handles cross-element ranges)
+      for (const seg of segments) {
+        // Skip segments inside table cells if the highlight would cross cell boundaries
+        const cell = seg.node.parentElement?.closest('td,th');
+        if (cell && segments.length > 1) {
+          // Check if other segments are in different cells
+          const otherCells = segments.filter(s => s !== seg).map(s => s.node.parentElement?.closest('td,th'));
+          if (otherCells.some(c => c && c !== cell)) continue;
+        }
+        const range = document.createRange();
+        range.setStart(seg.node, seg.startOff);
+        range.setEnd(seg.node, seg.endOff);
+        const span = document.createElement('span');
+        span.className = 'comment-hl';
+        span.dataset.markId = markId;
+        span.onclick = (ev) => { ev.stopPropagation(); focusComment(markId); };
+        try { range.surroundContents(span); } catch (e) { /* skip segment */ }
+      }
+      return true;
+    }
+
+    function applyCommentHighlights(comments) {
+      clearCommentHighlights();
+      for (const [id, c] of comments) {
+        if (c.quote) highlightTextInEditor(c.quote, id);
+      }
+    }
+
+    function focusComment(markId) {
+      // Open comments panel if not already open
+      const panel = document.getElementById('comments-panel');
+      if (!panel.classList.contains('open')) {
+        panel.classList.add('open');
+        document.body.classList.add('comments-open');
+        loadComments().then(() => activateComment(markId));
+        return;
+      }
+      activateComment(markId);
+    }
+
+    function activateComment(markId) {
+      // Remove previous focus
+      document.querySelectorAll('.comment.active').forEach(el => el.classList.remove('active'));
+      editor.querySelectorAll('.comment-hl.focused').forEach(el => el.classList.remove('focused'));
+      activeCommentId = markId;
+      // Highlight the comment card and scroll it into view
+      const card = document.querySelector(`.comment[data-mark-id="${markId}"]`);
+      if (card) {
+        card.classList.add('active');
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      // Highlight and scroll to the text in editor
+      const hl = editor.querySelector(`.comment-hl[data-mark-id="${markId}"]`);
+      if (hl) {
+        hl.classList.add('focused');
+        hl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    async function loadCommentHighlights() {
+      if (!slug) return;
+      try {
+        const res = await fetch(`/documents/${slug}/bridge/marks`, { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const marksObj = data.marks || {};
+        const comments = Object.entries(marksObj)
+          .filter(([, m]) => m.kind === 'comment' && !m.resolved && m.quote);
+        applyCommentHighlights(comments);
+      } catch (e) {}
+    }
+
+    function toggleComments() {
+      const panel = document.getElementById('comments-panel');
+      panel.classList.toggle('open');
+      document.body.classList.toggle('comments-open');
+      // Close history if open
+      if (panel.classList.contains('open')) {
+        const histPanel = document.getElementById('history-panel');
+        if (histPanel.classList.contains('open')) {
+          histPanel.classList.remove('open');
+          document.body.classList.remove('history-open');
+          if (previewingVersion) cancelPreview();
+        }
+      }
+      loadComments();
+    }
+
+    async function loadComments() {
+      if (!slug) return;
+      try {
+        const res = await fetch(`/documents/${slug}/bridge/marks`, { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const list = document.getElementById('comments-list');
+        const marksObj = data.marks || {};
+        const comments = Object.entries(marksObj)
+          .filter(([, m]) => m.kind === 'comment' && !m.resolved)
+          .sort((a, b) => (a[1].createdAt || '').localeCompare(b[1].createdAt || ''));
+
+        // Always clear stale highlights (e.g. after resolving the last comment)
+        clearCommentHighlights();
+
+        if (comments.length === 0) {
+          list.innerHTML = '<p style="color:#aaa;font-size:12px;padding:16px">No comments yet. Select text and click "Comment" to start.</p>';
+          return;
+        }
+        list.innerHTML = comments.map(([id, c]) => {
+          const replies = (c.thread || []).map(r => `
+            <div class="reply">
+              <div class="reply-text">${esc(r.text || '')}</div>
+              <div class="reply-meta">${esc(formatAuthor(r.by))}</div>
+            </div>
+          `).join('');
+          const hasQuote = c.quote && c.quote.trim();
+          return `
+            <div class="comment${hasQuote ? '' : ' general'}" data-mark-id="${esc(id)}" onclick="focusComment('${esc(id)}')">
+              ${hasQuote ? `<div class="comment-quote">${esc(c.quote)}</div>` : '<div class="general-label">General</div>'}
+              <div class="comment-text">${esc(c.text || c.body || '')}</div>
+              <div class="comment-meta">${esc(formatAuthor(c.by))}</div>
+              ${replies ? `<div class="reply-thread">${replies}</div>` : ''}
+              <div class="comment-actions">
+                <button class="comment-action" onclick="event.stopPropagation();openReply('${esc(id)}')">Reply</button>
+                <button class="comment-action" onclick="event.stopPropagation();resolveComment('${esc(id)}')">Resolve</button>
+              </div>
+              <div class="reply-form" id="reply-${esc(id)}">
+                <input placeholder="Reply..." onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')submitReply('${esc(id)}')">
+                <button onclick="event.stopPropagation();submitReply('${esc(id)}')">Send</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+        applyCommentHighlights(comments);
+      } catch (e) { console.error('loadComments failed:', e); }
+    }
+
+    function openReply(markId) {
+      const form = document.getElementById('reply-' + markId);
+      form.classList.toggle('open');
+      if (form.classList.contains('open')) form.querySelector('input').focus();
+    }
+
+    async function submitReply(markId) {
+      const form = document.getElementById('reply-' + markId);
+      const input = form.querySelector('input');
+      const text = input.value.trim();
+      if (!text || !slug) return;
+      try {
+        await opsRequest({ type: 'comment.reply', markId, by: getCommentAuthor(), text }, 2);
+        input.value = '';
+        form.classList.remove('open');
+        loadComments();
+      } catch (e) { console.error('reply failed:', e); }
+    }
+
+    async function resolveComment(markId) {
+      if (!slug) return;
+      try {
+        const res = await opsRequest({ type: 'comment.resolve', markId, by: getCommentAuthor() }, 2);
+        if (!res.ok) {
+          const err = await res.text().catch(() => '');
+          console.error('resolve failed:', res.status, err);
+          showToast('Resolve failed (' + res.status + ')');
+          return;
+        }
+        loadComments();
+        showToast('Comment resolved');
+      } catch (e) { console.error('resolve failed:', e); showToast('Resolve failed'); }
+    }
+
+    async function opsRequest(payload, retries) {
+      for (let attempt = 0; attempt <= (retries || 1); attempt++) {
+        const res = await fetch(`/documents/${slug}/ops`, {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) return res;
+        if (res.status === 409 && attempt < (retries || 1)) {
+          // Don't retry ANCHOR_NOT_FOUND — it won't resolve with time
+          const body = await res.clone().text().catch(() => '');
+          if (body.includes('ANCHOR_NOT_FOUND')) return res;
+          await new Promise(r => setTimeout(r, 600));
+          continue;
+        }
+        return res;
+      }
+    }
+
+    function cleanQuote(q) {
+      // Strip zero-width chars, object replacement chars, and normalize whitespace
+      return (q || '').replace(/[\u200B\u200C\u200D\uFEFF\uFFFC]/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    async function submitComment() {
+      const input = document.getElementById('comment-input');
+      const text = input.value.trim();
+      if (!text || !slug) { if (!slug) showToast('Error: no document loaded'); return; }
+      const quote = cleanQuote(pendingQuote);
+      try {
+        let res = await opsRequest({ type: 'comment.add', by: getCommentAuthor(), quote: quote, text }, 2);
+        // If anchor not found, retry as a general comment (no quote)
+        if (!res.ok && res.status === 409 && quote) {
+          const err = await res.text().catch(() => '');
+          if (err.includes('ANCHOR_NOT_FOUND')) {
+            res = await opsRequest({ type: 'comment.add', by: getCommentAuthor(), quote: '', text }, 2);
+          }
+        }
+        if (!res.ok) {
+          const err = await res.text().catch(() => '');
+          console.error('addComment failed:', res.status, err);
+          showToast('Comment failed (' + res.status + ')');
+          return;
+        }
+        input.value = '';
+        pendingQuote = '';
+        const quoteEl = document.getElementById('composer-quote');
+        quoteEl.textContent = '';
+        quoteEl.classList.remove('has-quote');
+        loadComments();
+        showToast('Comment added');
+      } catch (e) { console.error('addComment failed:', e); showToast('Comment failed'); }
+    }
+
+    function fmtTime(iso) {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+    }
+
+    let docVisibility = 'private';
+    let docIsOwner = false;
+    let docHasOwner = true;
+    let docShares = [];
+    let acResults = [];
+    let acHighlight = -1;
+    let acDebounce = null;
+
+    async function loadVisibility() {
+      if (!slug) return;
+      try {
+        const res = await fetch('/documents/' + slug + '/public-status', { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          docVisibility = data.visibility || 'shared';
+          docIsOwner = data.isOwner !== false;
+          docHasOwner = data.hasOwner !== false;
+          docShares = data.shares || [];
+          updateVisibilityButton();
+        }
+      } catch (e) {}
+    }
+
+    async function claimOwnership() {
+      if (!slug || !isLoggedIn) { showToast('Sign in first'); return; }
+      try {
+        const res = await fetch('/documents/' + slug + '/claim-ownership', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+        });
+        if (res.ok) {
+          showToast('You are now the owner');
+          loadVisibility();
+        } else {
+          const data = await res.json();
+          showToast(data.error || 'Failed to claim');
+        }
+      } catch (e) { showToast('Failed to claim ownership'); }
+    }
+
+    function updateVisibilityButton() {
+      const btn = document.getElementById('visibility-btn');
+      const colors = { private: '#ef4444', selective: '#f97316', shared: '#ffd600', public: '#22c55e' };
+      const labels = { private: 'Private', selective: 'Selective', shared: 'Organization', public: 'Public' };
+      const dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + (colors[docVisibility] || '#999') + ';margin-right:4px;vertical-align:middle"></span>';
+      if (!docIsOwner && isLoggedIn && !docHasOwner) {
+        // Unclaimed doc — offer to claim
+        btn.innerHTML = dot + 'Claim';
+        btn.className = 'btn btn-visibility vis-' + docVisibility;
+        btn.style.pointerEvents = '';
+        btn.style.opacity = '';
+        btn.title = 'Claim ownership to control visibility';
+        btn.onclick = claimOwnership;
+        return;
+      }
+      btn.innerHTML = dot + (labels[docVisibility] || docVisibility);
+      btn.className = 'btn btn-visibility vis-' + docVisibility;
+      if (docIsOwner) {
+        btn.style.pointerEvents = '';
+        btn.style.opacity = '';
+        btn.onclick = openShareModal;
+      } else {
+        // Not owner — read-only visibility label
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.6';
+        btn.onclick = null;
+      }
+    }
+
+    async function setVisibility(vis) {
+      if (!slug || !isLoggedIn) return;
+      try {
+        const res = await fetch('/documents/' + slug + '/set-visibility', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ visibility: vis })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          docVisibility = data.visibility;
+          updateVisibilityButton();
+          renderShareModal();
+        }
+      } catch (e) { showToast('Failed to update visibility'); }
+    }
+
+    async function addShare(email, role) {
+      if (!slug || !email) return;
+      const shareRole = role || document.getElementById('share-role-select')?.value || 'viewer';
+      try {
+        const res = await fetch('/documents/' + slug + '/shares', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ email: email.trim().toLowerCase(), role: shareRole })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          docShares = data.shares || [];
+          if (data.visibility) docVisibility = data.visibility;
+          updateVisibilityButton();
+          renderShareModal();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showToast(err.error || 'Failed to add');
+        }
+      } catch (e) { showToast('Failed to add user'); }
+    }
+
+    async function updateShareRole(email, newRole) {
+      if (!slug || !email) return;
+      try {
+        const res = await fetch('/documents/' + slug + '/shares', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ email, role: newRole })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          docShares = data.shares || [];
+          renderShareModal();
+        }
+      } catch (e) { showToast('Failed to update role'); }
+    }
+
+    async function removeShare(email) {
+      if (!slug || !email) return;
+      try {
+        const res = await fetch('/documents/' + slug + '/shares/' + encodeURIComponent(email), { method: 'DELETE', headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          docShares = data.shares || [];
+          renderShareModal();
+        }
+      } catch (e) { showToast('Failed to remove'); }
+    }
+
+    async function fetchAutocomplete(query) {
+      if (!query || query.length < 2) { acResults = []; return; }
+      try {
+        const res = await fetch('/api/directory/users?q=' + encodeURIComponent(query), { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          const sharedEmails = new Set(docShares.map(s => s.email));
+          acResults = (data.users || []).filter(u => !sharedEmails.has(u.email));
+        }
+      } catch { acResults = []; }
+    }
+
+    function getInitials(name) {
+      return (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    }
+
+    function renderShareModal() {
+      const existing = document.getElementById('share-modal-overlay');
+      if (!existing) return;
+      const body = existing.querySelector('.share-modal-body');
+      if (!body) return;
+
+      const hasPeople = docShares.length > 0;
+      const visOptions = [
+        { key: 'private', label: 'Private', desc: 'Only you can access' },
+        { key: 'selective', label: 'Selective', desc: 'Only specific people you add' },
+        { key: 'shared', label: 'Organization', desc: hasPeople ? 'cultivarium.org accounts and specific people added' : 'Anyone at cultivarium.org who is logged in' },
+        { key: 'public', label: 'Public', desc: hasPeople ? 'Anyone with the link, plus specific people added' : 'Anyone with the link' },
+      ];
+
+      const roleOptions = ['viewer', 'commenter', 'editor'];
+
+      const domainSuffix = '@cultivarium.org';
+      const peopleHtml = docShares.length > 0
+        ? docShares.map(s => {
+            const initials = getInitials(s.email.split('@')[0]);
+            const isExternal = !s.email.endsWith(domainSuffix);
+            const roleSelect = docIsOwner
+              ? '<select class="share-person-role" onchange="updateShareRole(\'' + esc(s.email) + '\', this.value)">' +
+                  roleOptions.map(r => '<option value="' + r + '"' + (s.role === r ? ' selected' : '') + '>' + r + '</option>').join('') +
+                '</select>'
+              : '<span style="font-size:11px;color:#999">' + esc(s.role || 'viewer') + '</span>';
+            const magicLinkBtn = (isExternal && s.magic_token && docIsOwner)
+              ? '<button class="share-copy-btn" style="padding:3px 8px;font-size:10px" ' +
+                  'onclick="event.stopPropagation();copyMagicLink(\'' + esc(s.magic_token) + '\')" title="Copy magic link for this person">Link</button>'
+              : '';
+            const externalBadge = isExternal
+              ? '<span style="font-size:9px;background:#f0f0f0;color:#888;padding:1px 5px;border-radius:3px;margin-left:4px">external</span>'
+              : '';
+            return '<div class="share-person">' +
+              '<div class="share-person-info">' +
+                '<div class="share-person-avatar" style="' + (isExternal ? 'background:#fef3c7;color:#92400e' : '') + '">' + esc(initials) + '</div>' +
+                '<div><div class="share-person-email">' + esc(s.email) + externalBadge + '</div></div>' +
+              '</div>' +
+              '<div style="display:flex;align-items:center;gap:6px">' +
+                magicLinkBtn +
+                roleSelect +
+                (docIsOwner ? '<button class="share-person-remove" onclick="removeShare(\'' + esc(s.email) + '\')" title="Remove">&times;</button>' : '') +
+              '</div>' +
+            '</div>';
+          }).join('')
+        : '<div style="font-size:12px;color:#aaa;padding:4px 0">No people added yet</div>';
+
+      const acHtml = acResults.length > 0
+        ? acResults.map((u, i) =>
+            '<div class="share-ac-item' + (i === acHighlight ? ' highlighted' : '') + '" onmousedown="selectAutocomplete(' + i + ')">' +
+              '<span class="share-ac-name">' + esc(u.name) + '</span>' +
+              '<span class="share-ac-email">' + esc(u.email) + '</span>' +
+            '</div>'
+          ).join('')
+        : '';
+
+      const showPeopleSection = docVisibility === 'selective' || docVisibility === 'shared' || docShares.length > 0;
+
+      body.innerHTML =
+        '<div class="share-section">' +
+          '<div class="share-section-label">Access</div>' +
+          '<div class="share-visibility-options">' +
+            visOptions.map(o =>
+              '<div class="share-vis-option' + (docVisibility === o.key ? ' active' : '') + '"' +
+                (docIsOwner ? ' onclick="setVisibility(\'' + o.key + '\')"' : '') +
+                (docIsOwner ? '' : ' style="opacity:0.6;cursor:default"') + '>' +
+                '<div class="share-vis-dot ' + o.key + '"></div>' +
+                '<div><div class="share-vis-label">' + o.label + '</div>' +
+                '<div class="share-vis-desc">' + o.desc + '</div></div>' +
+              '</div>'
+            ).join('') +
+          '</div>' +
+        '</div>' +
+        (showPeopleSection ? (
+          (docIsOwner ? (
+            '<div class="share-section">' +
+              '<div class="share-section-label">People</div>' +
+              '<div class="share-add-row">' +
+                '<input class="share-email-input" id="share-email" type="email" placeholder="Email address" ' +
+                  'oninput="handleShareInput(this)" onkeydown="handleShareKeydown(event)" autocomplete="off">' +
+                '<select class="share-role-select" id="share-role-select">' +
+                  '<option value="viewer">Viewer</option>' +
+                  '<option value="commenter">Commenter</option>' +
+                  '<option value="editor">Editor</option>' +
+                '</select>' +
+                '<button class="share-add-btn" onclick="submitShareEmail()">Add</button>' +
+                '<div class="share-autocomplete" id="share-autocomplete">' + acHtml + '</div>' +
+              '</div>' +
+              '<div class="share-people-list">' + peopleHtml + '</div>' +
+            '</div>'
+          ) : (
+            '<div class="share-section">' +
+              '<div class="share-section-label">People</div>' +
+              '<div class="share-people-list">' + peopleHtml + '</div>' +
+            '</div>'
+          ))
+        ) : '') +
+        '<div class="share-section">' +
+          '<div class="share-section-label">Link</div>' +
+          '<div class="share-link-row">' +
+            '<input class="share-link-input" readonly value="' + esc(window.location.href) + '">' +
+            '<button class="share-copy-btn" onclick="navigator.clipboard.writeText(window.location.href).then(()=>showToast(\'Link copied\'))">Copy</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function openShareModal() {
+      if (!isLoggedIn) { showToast('Sign in to manage sharing'); return; }
+      const existing = document.getElementById('share-modal-overlay');
+      if (existing) { existing.remove(); return; }
+
+      const overlay = document.createElement('div');
+      overlay.id = 'share-modal-overlay';
+      overlay.className = 'share-modal-overlay';
+      overlay.innerHTML =
+        '<div class="share-modal">' +
+          '<div class="share-modal-header">' +
+            '<h3>Share</h3>' +
+            '<button class="share-modal-close" onclick="closeShareModal()">&times;</button>' +
+          '</div>' +
+          '<div class="share-modal-body"></div>' +
+        '</div>';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) closeShareModal(); });
+      overlay._escHandler = (e) => { if (e.key === 'Escape') closeShareModal(); };
+      document.addEventListener('keydown', overlay._escHandler);
+      document.body.appendChild(overlay);
+      acResults = [];
+      acHighlight = -1;
+      renderShareModal();
+    }
+
+    function closeShareModal() {
+      const overlay = document.getElementById('share-modal-overlay');
+      if (overlay) {
+        if (overlay._escHandler) document.removeEventListener('keydown', overlay._escHandler);
+        overlay.remove();
+      }
+      acResults = [];
+      acHighlight = -1;
+    }
+
+    function handleShareInput(input) {
+      clearTimeout(acDebounce);
+      const q = input.value.trim();
+      acHighlight = -1;
+      if (q.length < 2) {
+        acResults = [];
+        const ac = document.getElementById('share-autocomplete');
+        if (ac) { ac.innerHTML = ''; ac.classList.remove('open'); }
+        return;
+      }
+      acDebounce = setTimeout(async () => {
+        await fetchAutocomplete(q);
+        const ac = document.getElementById('share-autocomplete');
+        if (!ac) return;
+        if (acResults.length > 0) {
+          ac.innerHTML = acResults.map((u, i) =>
+            '<div class="share-ac-item' + (i === acHighlight ? ' highlighted' : '') + '" onmousedown="selectAutocomplete(' + i + ')">' +
+              '<span class="share-ac-name">' + esc(u.name) + '</span>' +
+              '<span class="share-ac-email">' + esc(u.email) + '</span>' +
+            '</div>'
+          ).join('');
+          ac.classList.add('open');
+        } else {
+          ac.innerHTML = '';
+          ac.classList.remove('open');
+        }
+      }, 200);
+    }
+
+    function handleShareKeydown(e) {
+      const ac = document.getElementById('share-autocomplete');
+      if (e.key === 'ArrowDown' && acResults.length > 0) {
+        e.preventDefault();
+        acHighlight = Math.min(acHighlight + 1, acResults.length - 1);
+        updateAcHighlight();
+      } else if (e.key === 'ArrowUp' && acResults.length > 0) {
+        e.preventDefault();
+        acHighlight = Math.max(acHighlight - 1, 0);
+        updateAcHighlight();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (acHighlight >= 0 && acHighlight < acResults.length) {
+          selectAutocomplete(acHighlight);
+        } else {
+          submitShareEmail();
+        }
+      } else if (e.key === 'Escape') {
+        acResults = [];
+        acHighlight = -1;
+        if (ac) { ac.innerHTML = ''; ac.classList.remove('open'); }
+      }
+    }
+
+    function updateAcHighlight() {
+      const ac = document.getElementById('share-autocomplete');
+      if (!ac) return;
+      ac.querySelectorAll('.share-ac-item').forEach((el, i) => {
+        el.classList.toggle('highlighted', i === acHighlight);
+      });
+    }
+
+    function selectAutocomplete(idx) {
+      if (idx < 0 || idx >= acResults.length) return;
+      const email = acResults[idx].email;
+      acResults = [];
+      acHighlight = -1;
+      const ac = document.getElementById('share-autocomplete');
+      if (ac) { ac.innerHTML = ''; ac.classList.remove('open'); }
+      addShare(email);
+    }
+
+    function submitShareEmail() {
+      const input = document.getElementById('share-email');
+      if (!input) return;
+      const email = input.value.trim().toLowerCase();
+      if (!email) return;
+      if (!email.includes('@')) {
+        showToast('Enter a valid email');
+        return;
+      }
+      addShare(email);
+      input.value = '';
+    }
+
+    function copyMagicLink(token) {
+      const url = window.location.origin + '/d/' + slug + '?token=' + encodeURIComponent(token);
+      navigator.clipboard.writeText(url).then(() => showToast('Magic link copied — send it to the recipient'));
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // -- Version history --
+    let previewingVersion = null;
+    let previewBackupHtml = null;
+
+    function toggleHistory() {
+      const panel = document.getElementById('history-panel');
+      panel.classList.toggle('open');
+      document.body.classList.toggle('history-open');
+      // Close comments if open
+      if (panel.classList.contains('open')) {
+        document.getElementById('comments-panel').classList.remove('open');
+        document.body.classList.remove('comments-open');
+        loadVersions();
+      } else if (previewingVersion) {
+        cancelPreview();
+      }
+    }
+
+    async function loadVersions() {
+      if (!slug) return;
+      const list = document.getElementById('history-list');
+      list.innerHTML = '<p style="color:#aaa;font-size:12px;padding:16px">Loading...</p>';
+      try {
+        // Load both version history and view history in parallel
+        const [versionsRes, viewsRes] = await Promise.all([
+          fetch('/documents/' + slug + '/versions', { headers: authHeaders() }),
+          fetch('/documents/' + slug + '/views', { headers: authHeaders() })
+        ]);
+        let html = '';
+        // Document history section
+        html += '<div style="padding:12px 16px 4px;font-size:11px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:0.5px">Document History</div>';
+        if (versionsRes.ok) {
+          const versions = await versionsRes.json();
+          if (versions.length === 0) {
+            html += '<p style="color:#aaa;font-size:12px;padding:4px 16px 12px">No version history yet.</p>';
+          } else {
+            html += versions.map(v => {
+              const date = fmtTime(v.created_at);
+              const actor = (v.actor || '').replace(/^(ai:|agent:|user:|oauth_user:|oauth:|rewrite:)/, '') || 'Unknown';
+              const size = v.markdown_length > 1000 ? Math.round(v.markdown_length / 1000) + 'k chars' : v.markdown_length + ' chars';
+              return '<div class="version-item" data-id="' + v.id + '" onclick="previewVersion(' + v.id + ')">' +
+                '<div class="version-date">' + esc(date) + '</div>' +
+                '<div class="version-meta">Rev ' + (v.revision || '?') + ' · ' + esc(actor) + ' · ' + size + '</div>' +
+                '<div class="version-actions">' +
+                '<button onclick="event.stopPropagation();previewVersion(' + v.id + ')">Preview</button>' +
+                '<button class="restore-btn" onclick="event.stopPropagation();restoreVersion(' + v.id + ')">Restore</button>' +
+                '</div></div>';
+            }).join('');
+          }
+        } else {
+          html += '<p style="color:#aaa;font-size:12px;padding:4px 16px 12px">No version history yet.</p>';
+        }
+        // User history section
+        html += '<div style="padding:16px 16px 4px;font-size:11px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid #f0f0f0;margin-top:8px">User History</div>';
+        if (viewsRes.ok) {
+          const viewData = await viewsRes.json();
+          if (!viewData.history || viewData.history.length === 0) {
+            html += '<p style="color:#aaa;font-size:12px;padding:4px 16px">No visits recorded yet.</p>';
+          } else {
+            html += viewData.history.slice(0, 50).map(v => {
+              const date = fmtTime(v.viewed_at);
+              const name = (v.user_name || 'Anonymous').replace(/^(ai:|agent:|user:|oauth_user:|oauth:)/, '');
+              return '<div style="padding:6px 16px;font-size:12px;color:#666;border-bottom:1px solid #fafafa">' +
+                '<span style="color:#333;font-weight:500">' + esc(name) + '</span>' +
+                '<span style="color:#bbb;margin-left:8px">' + esc(date) + '</span></div>';
+            }).join('');
+          }
+        }
+        list.innerHTML = html;
+      } catch (e) { console.error('loadVersions failed:', e); }
+    }
+
+    async function previewVersion(id) {
+      if (!slug) return;
+      try {
+        const res = await fetch('/documents/' + slug + '/versions/' + id, { headers: authHeaders() });
+        if (!res.ok) return;
+        const v = await res.json();
+        if (!previewingVersion) {
+          previewBackupHtml = editor.innerHTML;
+        }
+        previewingVersion = id;
+        editor.innerHTML = DOMPurify.sanitize(marked.parse(stripStrikethrough(v.markdown || '')));
+        editor.contentEditable = 'false';
+        editor.style.opacity = '0.7';
+        statusEl.textContent = 'Previewing version from ' + fmtTime(v.created_at);
+        // Highlight active item
+        document.querySelectorAll('.version-item').forEach(el => el.classList.remove('previewing'));
+        const active = document.querySelector('.version-item[data-id="' + id + '"]');
+        if (active) active.classList.add('previewing');
+      } catch (e) { console.error('preview failed:', e); }
+    }
+
+    function cancelPreview() {
+      if (!previewingVersion) return;
+      editor.innerHTML = previewBackupHtml || '';
+      editor.contentEditable = 'true';
+      editor.style.opacity = '';
+      previewingVersion = null;
+      previewBackupHtml = null;
+      statusEl.textContent = '';
+      document.querySelectorAll('.version-item').forEach(el => el.classList.remove('previewing'));
+    }
+
+    async function restoreVersion(id) {
+      if (!slug) return;
+      if (!confirm('Restore this version? Your current content will be saved as a version first.')) return;
+      try {
+        const res = await fetch('/documents/' + slug + '/versions/' + id + '/restore', { method: 'POST', headers: authHeaders() });
+        if (!res.ok) { showToast('Restore failed'); return; }
+        const data = await res.json();
+        // Apply the restored markdown via rewrite
+        previewingVersion = null;
+        previewBackupHtml = null;
+        editor.contentEditable = 'true';
+        editor.style.opacity = '';
+        editor.innerHTML = DOMPurify.sanitize(marked.parse(stripStrikethrough(data.markdown || '')));
+        lastSavedMarkdown = ''; // force save
+        clearTimeout(saveTimeout);
+        saveDoc();
+        syncTitle();
+        showToast('Version restored');
+        loadVersions();
+      } catch (e) { showToast('Restore failed'); console.error(e); }
+    }
+
+    document.addEventListener('mousedown', (e) => {
+      if (!toolbar.contains(e.target) && e.target !== editor) {
+        toolbar.style.display = 'none';
+      }
+    });
+
+    // -- Delete document --
+    function confirmDeleteDoc() {
+      const title = getH1Text() || 'Untitled';
+      const modal = document.createElement('div');
+      modal.className = 'confirm-modal';
+      modal.innerHTML = `
+        <div class="confirm-box">
+          <p class="confirm-title">Delete this document?</p>
+          <p>${esc(title)}</p>
+          <div class="confirm-actions">
+            <button class="confirm-cancel" id="cancel-del">Cancel</button>
+            <button class="confirm-del" id="do-del">Delete</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+      modal.querySelector('#cancel-del').addEventListener('click', () => modal.remove());
+      modal.querySelector('#do-del').addEventListener('click', async () => {
+        try {
+          const res = await fetch(`/documents/${slug}/self-hosted-delete`, { method: 'POST', headers: authHeaders() });
+          if (res.ok) {
+            window.location.href = '/';
+          } else {
+            showToast('Delete failed');
+            modal.remove();
+          }
+        } catch (e) {
+          showToast('Delete failed');
+          modal.remove();
+        }
+      });
+    }
+
+    let isLoggedIn = false;
+    let authUserName = '';
+    function getCommentAuthor() {
+      return authUserName || 'Anonymous';
+    }
+    function formatAuthor(a) {
+      return (a || 'Anonymous').replace(/^(ai:|agent:|user:|oauth_user:|oauth:)/, '');
+    }
+    async function checkAuth() {
+      try {
+        const res = await fetch('/auth/me', { headers: authHeaders() });
+        const data = await res.json();
+        isLoggedIn = !!(data.authenticated && data.user);
+        if (isLoggedIn) authUserName = data.user.name || data.user.email || '';
+      } catch (e) {}
+    }
+    // -- View tracking --
+    function recordView() {
+      if (!slug) return;
+      fetch('/documents/' + slug + '/record-view', { method: 'POST', headers: authHeaders() }).catch(function() {});
+    }
+
+    async function loadViewData() {
+      if (!slug) return;
+      try {
+        var res = await fetch('/documents/' + slug + '/views', { headers: authHeaders() });
+        if (!res.ok) return;
+        var data = await res.json();
+        // View count
+        var countEl = document.getElementById('view-count');
+        if (data.viewCount > 0) countEl.textContent = data.viewCount + ' view' + (data.viewCount === 1 ? '' : 's');
+        // Viewer avatars
+        var avatarsEl = document.getElementById('viewer-avatars');
+        avatarsEl.innerHTML = '';
+        var colors = ['#a78bfa','#6ee7b7','#fbbf24','#f87171','#60a5fa','#f472b6','#34d399','#fb923c'];
+        (data.recentViewers || []).slice(0, 5).forEach(function(v, i) {
+          var name = (v.user_name || 'Anonymous').replace(/^(ai:|agent:|user:|oauth_user:|oauth:)/, '');
+          var initials = name.split(' ').map(function(w) { return w[0]; }).join('').slice(0, 2).toUpperCase();
+          var div = document.createElement('div');
+          div.className = 'viewer-avatar';
+          div.style.background = colors[i % colors.length];
+          div.style.color = '#fff';
+          div.textContent = initials;
+          div.title = name;
+          avatarsEl.appendChild(div);
+        });
+      } catch (e) {}
+    }
+
+    // -- Document Outline --
+    function initOutline() {
+      const editorEl = document.getElementById('editor');
+      const outlineItems = document.getElementById('outline-items');
+      const outline = document.getElementById('document-outline');
+      if (!editorEl || !outlineItems || !outline) return;
+
+      function buildOutline() {
+        const headings = editorEl.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        outlineItems.innerHTML = '';
+        if (headings.length < 2) {
+          outline.classList.add('hidden');
+          document.body.classList.remove('has-outline');
+          return;
+        }
+        outline.classList.remove('hidden');
+        document.body.classList.add('has-outline');
+        headings.forEach(function(h, i) {
+          if (!h.id) h.id = 'outline-h-' + i;
+          var item = document.createElement('div');
+          item.className = 'outline-item ' + h.tagName.toLowerCase();
+          item.textContent = h.textContent;
+          item.dataset.target = h.id;
+          item.addEventListener('click', function() {
+            h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+          outlineItems.appendChild(item);
+        });
+        updateActiveHeading();
+      }
+
+      function updateActiveHeading() {
+        var items = outlineItems.querySelectorAll('.outline-item');
+        var headings = editorEl.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        if (!headings.length) return;
+        var current = 0;
+        headings.forEach(function(h, i) {
+          if (h.getBoundingClientRect().top <= 80) current = i;
+        });
+        items.forEach(function(item, i) {
+          item.classList.toggle('active', i === current);
+        });
+      }
+
+      var observer = new MutationObserver(function() {
+        requestAnimationFrame(buildOutline);
+      });
+      observer.observe(editorEl, { childList: true, subtree: true });
+      window.addEventListener('scroll', function() {
+        requestAnimationFrame(updateActiveHeading);
+      });
+      buildOutline();
+    }
+
+    // Load doc and auth in parallel — doc doesn't need auth result to fetch
+    Promise.all([checkAuth(), loadDoc()]).then(() => { initOutline(); recordView(); loadViewData(); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-server/
+build/
+.vite/
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+
+# Xcode
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+DerivedData/
+.xcode-derived/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.xcworkspace/
+
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Secrets (API keys)
+AgentDoc/Secrets.plist
+
+# Logs
+*.log
+npm-debug.log*
+.tmp-agentdoc-serve.pid
+
+# Scratch
+.tmp/
+.worktrees/
+build-release/
+build-release-dist/
+
+# TypeScript
+*.tsbuildinfo
+
+# Test output
+coverage/
+
+# Generated reports
+plans/reports/**/*.json
+!plans/reports/e2e-expected-results.json
+plans/*-plan-cache.json
+
+# MCP Server build
+dist-mcp/
+
+# Share server local data
+agentdoc.db
+agentdoc.db-shm
+agentdoc.db-wal
+snapshots/
+test-results/
+
+# Playwright MCP screenshots
+.playwright-mcp/
+
+# Package locks (keep package.json)
+package-lock.json
+CODEX-IMPLEMENT.md
+MOBILE-ACTION-BAR-PLAN.md
+proof-share.db*

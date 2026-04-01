@@ -1,0 +1,8 @@
+{
+  "name": "@agentdoc/core",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Core AgentDoc SDK document and provenance types",
+  "exports": "./src/index.ts"
+}

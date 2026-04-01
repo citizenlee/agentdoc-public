@@ -1,0 +1,8 @@
+{
+  "name": "@agentdoc/editor",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "AgentDoc SDK editor runtime and editor-facing plugins",
+  "exports": "./src/index.ts"
+}

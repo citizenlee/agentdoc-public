@@ -1,0 +1,905 @@
+/**
+ * Client-side share operations for web viewers.
+ * Detects /d/:slug URL, fetches doc from server, manages WebSocket sync.
+ */
+
+import { executeBridgeCall } from './bridge-executor';
+
+export interface ShareDocument {
+  slug: string;
+  docId?: string;
+  title: string | null;
+  markdown: string;
+  marks: Record<string, unknown>;
+  shareState?: 'ACTIVE' | 'PAUSED' | 'REVOKED' | 'DELETED';
+  createdAt?: string;
+  updatedAt?: string;
+  viewers?: number;
+}
+
+export type ShareRole = 'viewer' | 'commenter' | 'editor' | 'owner_bot';
+export type ShareState = 'ACTIVE' | 'PAUSED' | 'REVOKED' | 'DELETED';
+export type AccessLinkRole = 'viewer' | 'commenter' | 'editor';
+
+export interface CollabSessionInfo {
+  docId: string;
+  slug: string;
+  role: ShareRole;
+  shareState: ShareState;
+  accessEpoch: number;
+  syncProtocol: 'pm-yjs-v1';
+  collabWsUrl: string;
+  token: string;
+  snapshotVersion: number;
+  expiresAt?: string;
+}
+
+export interface ShareOpenContext {
+  success: boolean;
+  collabAvailable?: boolean;
+  snapshotUrl?: string | null;
+  doc: ShareDocument & {
+    active?: boolean;
+  };
+  session?: CollabSessionInfo;
+  capabilities: { canRead: boolean; canComment: boolean; canEdit: boolean };
+  links: { webUrl: string; snapshotUrl: string | null };
+}
+
+export interface SharePendingEvent {
+  id: number;
+  type: string;
+  data: Record<string, unknown>;
+  actor: string | null;
+  createdAt: string;
+  ackedAt?: string | null;
+  ackedBy?: string | null;
+}
+
+export interface SharePendingEventsResponse {
+  success: boolean;
+  events: SharePendingEvent[];
+  cursor: number;
+}
+
+export type ShareRequestError = {
+  error: {
+    status: number;
+    code: string;
+    message: string;
+  };
+};
+
+type CollabSessionPayload = {
+  session: CollabSessionInfo;
+  capabilities: { canRead: boolean; canComment: boolean; canEdit: boolean };
+};
+
+type CollabUnavailablePayload = {
+  collabAvailable: false;
+  snapshotUrl: string | null;
+};
+
+export interface AccessLinkResponse {
+  role: AccessLinkRole;
+  accessToken: string;
+  token: string;
+  webShareUrl: string;
+}
+
+export interface ShareMarkMutationResponse {
+  success: boolean;
+  marks?: Record<string, unknown>;
+}
+
+type ShareMutationBase = {
+  baseRevision?: number;
+  baseUpdatedAt?: string;
+};
+
+export type ShareEventHandler = (message: Record<string, unknown>) => void;
+
+export class ShareClient {
+  private slug: string | null = null;
+  private shareToken: string | null = null;
+  private everySessionToken: string | null = null;
+  private apiOriginOverride: string | null = null;
+  private clientId: string | null = null;
+  private ws: WebSocket | null = null;
+  private eventHandlers: ShareEventHandler[] = [];
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private viewerName: string | null = null;
+  private reconnectDelay = 1000;
+  private maxReconnectDelay = 30000;
+  private clientVersion = '0.31.0';
+  private clientBuild = 'web';
+  private clientProtocol = '3';
+
+  constructor() {
+    this.detectShareMode();
+  }
+
+  private detectShareMode(): void {
+    const agentdocConfig = (window as Window & {
+      __AGENTDOC_CONFIG__?: {
+        shareSlug?: string;
+        shareToken?: string;
+        shareSessionToken?: string;
+        shareServerBaseURL?: string;
+        agentdocClientVersion?: string;
+        agentdocClientBuild?: string;
+        agentdocClientProtocol?: string;
+      };
+    }).__AGENTDOC_CONFIG__ ?? {};
+
+    // Accept `/d/:slug` and `/d/:slug/` (some hosts/linkers append a trailing slash).
+    const path = typeof window.location.pathname === 'string'
+      ? window.location.pathname.replace(/\/+$/, '')
+      : '';
+    const match = path.match(/^\/d\/([^/?#]+)$/);
+    if (match) {
+      try {
+        this.slug = decodeURIComponent(match[1]);
+      } catch {
+        this.slug = match[1];
+      }
+    } else if (typeof agentdocConfig.shareSlug === 'string' && agentdocConfig.shareSlug.trim()) {
+      this.slug = agentdocConfig.shareSlug.trim();
+    } else {
+      this.slug = null;
+    }
+    const configToken = typeof agentdocConfig.shareToken === 'string' && agentdocConfig.shareToken.trim()
+      ? agentdocConfig.shareToken.trim()
+      : '';
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (configToken) {
+      this.shareToken = configToken;
+    } else if (token && token.trim()) {
+      this.shareToken = token.trim();
+    } else {
+      this.shareToken = null;
+    }
+
+    this.everySessionToken = (typeof agentdocConfig.shareSessionToken === 'string' && agentdocConfig.shareSessionToken.trim())
+      ? agentdocConfig.shareSessionToken.trim()
+      : null;
+    this.apiOriginOverride = (typeof agentdocConfig.shareServerBaseURL === 'string' && agentdocConfig.shareServerBaseURL.trim())
+      ? agentdocConfig.shareServerBaseURL.trim().replace(/\/+$/, '')
+      : null;
+    this.clientVersion = (typeof agentdocConfig.agentdocClientVersion === 'string' && agentdocConfig.agentdocClientVersion.trim())
+      ? agentdocConfig.agentdocClientVersion.trim()
+      : '0.31.0';
+    this.clientBuild = (typeof agentdocConfig.agentdocClientBuild === 'string' && agentdocConfig.agentdocClientBuild.trim())
+      ? agentdocConfig.agentdocClientBuild.trim()
+      : 'web';
+    this.clientProtocol = (typeof agentdocConfig.agentdocClientProtocol === 'string' && agentdocConfig.agentdocClientProtocol.trim())
+      ? agentdocConfig.agentdocClientProtocol.trim()
+      : '3';
+  }
+
+  isShareMode(): boolean {
+    return this.slug !== null;
+  }
+
+  refreshRuntimeConfig(): boolean {
+    this.detectShareMode();
+    return this.slug !== null;
+  }
+
+  getSlug(): string | null {
+    return this.slug;
+  }
+
+  getTokenizedWebUrl(options?: { token?: string; origin?: string }): string | null {
+    if (!this.slug) return null;
+    const token = options?.token?.trim() || this.shareToken;
+    if (!token) return null;
+    const origin = options?.origin?.trim() || this.apiOriginOverride || window.location.origin;
+    return `${origin}/d/${encodeURIComponent(this.slug)}?token=${encodeURIComponent(token)}`;
+  }
+
+  getClientId(): string | null {
+    return this.clientId;
+  }
+
+  setViewerName(name: string): void {
+    this.viewerName = name;
+  }
+
+  private getApiBase(): string {
+    const origin = this.apiOriginOverride || window.location.origin;
+    return `${origin}/api`;
+  }
+
+  getShareAuthHeaders(explicitToken?: string): Record<string, string> {
+    const token = explicitToken?.trim() || this.shareToken;
+    const headers: Record<string, string> = {
+      'X-Agentdoc-Client-Version': this.clientVersion,
+      'X-Agentdoc-Client-Build': this.clientBuild,
+      'X-Agentdoc-Client-Protocol': this.clientProtocol,
+    };
+    if (token) {
+      headers['x-share-token'] = token;
+    }
+    if (this.everySessionToken) {
+      headers.Authorization = `Bearer ${this.everySessionToken}`;
+    }
+    return headers;
+  }
+
+  private async parseRequestError(response: Response): Promise<ShareRequestError> {
+    const body = await response.json().catch(() => ({} as { error?: unknown; code?: unknown }));
+    const code = typeof body.code === 'string' && body.code.trim().length > 0
+      ? body.code
+      : 'unknown';
+    const message = typeof body.error === 'string' && body.error.trim().length > 0
+      ? body.error
+      : response.statusText || 'Request failed';
+    return {
+      error: {
+        status: response.status,
+        code,
+        message,
+      },
+    };
+  }
+
+  private createLocalRequestError(status: number, code: string, message: string): ShareRequestError {
+    return {
+      error: { status, code, message },
+    };
+  }
+
+  private async getMutationBase(options?: { token?: string }): Promise<ShareMutationBase | ShareRequestError> {
+    if (!this.slug) {
+      return this.createLocalRequestError(400, 'missing_slug', 'Share slug is not available');
+    }
+
+    const response = await fetch(`${this.getApiBase()}/agent/${encodeURIComponent(this.slug)}/state`, {
+      method: 'GET',
+      headers: this.getShareAuthHeaders(options?.token),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    const revision = Number.isInteger(payload?.revision) ? Number(payload?.revision) : null;
+    if (revision !== null && revision > 0) {
+      return { baseRevision: revision };
+    }
+    const updatedAt = typeof payload?.updatedAt === 'string' && payload.updatedAt.trim().length > 0
+      ? payload.updatedAt.trim()
+      : null;
+    if (updatedAt) {
+      return { baseUpdatedAt: updatedAt };
+    }
+    return this.createLocalRequestError(409, 'missing_mutation_base', 'Could not determine current mutation base');
+  }
+
+  private isShareRole(value: unknown): value is ShareRole {
+    return value === 'viewer' || value === 'commenter' || value === 'editor' || value === 'owner_bot';
+  }
+
+  private isShareState(value: unknown): value is ShareState {
+    return value === 'ACTIVE' || value === 'PAUSED' || value === 'REVOKED' || value === 'DELETED';
+  }
+
+  private isCollabSessionInfo(value: unknown): value is CollabSessionInfo {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const candidate = value as Partial<CollabSessionInfo>;
+    return typeof candidate.docId === 'string'
+      && candidate.docId.length > 0
+      && typeof candidate.slug === 'string'
+      && candidate.slug.length > 0
+      && this.isShareRole(candidate.role)
+      && this.isShareState(candidate.shareState)
+      && typeof candidate.accessEpoch === 'number'
+      && Number.isFinite(candidate.accessEpoch)
+      && candidate.syncProtocol === 'pm-yjs-v1'
+      && typeof candidate.collabWsUrl === 'string'
+      && candidate.collabWsUrl.length > 0
+      && typeof candidate.token === 'string'
+      && candidate.token.length > 0
+      && typeof candidate.snapshotVersion === 'number'
+      && Number.isFinite(candidate.snapshotVersion);
+  }
+
+  private postMetric(path: string, payload: Record<string, unknown>): void {
+    const url = `${this.getApiBase()}/metrics/${path}`;
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      try {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
+        return;
+      } catch {
+        // fall through to fetch
+      }
+    }
+    void fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify(payload),
+    }).catch(() => {
+      // best-effort observability
+    });
+  }
+
+  /**
+   * Fetch the shared document from the server
+   */
+  async fetchDocument(): Promise<ShareDocument | null> {
+    if (!this.slug) return null;
+
+    try {
+      const response = await fetch(`${this.getApiBase()}/documents/${this.slug}`, {
+        headers: this.getShareAuthHeaders(),
+      });
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null;
+        }
+        throw new Error(`Failed to fetch document: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('[ShareClient] Failed to fetch document:', error);
+      throw error;
+    }
+  }
+
+  async updateDocumentTitle(
+    title: string | null,
+    options?: { token?: string },
+  ): Promise<{ success: boolean; title: string | null; updatedAt?: string } | ShareRequestError | null> {
+    if (!this.slug) return null;
+
+    const response = await fetch(`${this.getApiBase()}/documents/${this.slug}/title`, {
+      method: 'PUT',
+      headers: {
+        ...this.getShareAuthHeaders(options?.token),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title }),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json() as { success?: boolean; title?: string | null; updatedAt?: string };
+    return {
+      success: payload.success === true,
+      title: typeof payload.title === 'string' ? payload.title : null,
+      updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : undefined,
+    };
+  }
+
+  async fetchCollabSession(
+    options?: { token?: string }
+  ): Promise<CollabSessionPayload | CollabUnavailablePayload | ShareRequestError | null> {
+    if (!this.slug) return null;
+    const headers = this.getShareAuthHeaders(options?.token);
+
+    const response = await fetch(`${this.getApiBase()}/documents/${this.slug}/collab-session`, { headers });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json() as {
+      session?: CollabSessionInfo;
+      capabilities?: { canRead: boolean; canComment: boolean; canEdit: boolean };
+      collabAvailable?: boolean;
+      snapshotUrl?: string | null;
+    };
+    if (payload?.collabAvailable === false) {
+      return {
+        collabAvailable: false,
+        snapshotUrl: payload.snapshotUrl ?? null,
+      };
+    }
+    if (!this.isCollabSessionInfo(payload.session) || !payload.capabilities) return null;
+    return {
+      session: payload.session,
+      capabilities: payload.capabilities,
+    };
+  }
+
+  async fetchOpenContext(options?: { token?: string }): Promise<ShareOpenContext | ShareRequestError | null> {
+    if (!this.slug) return null;
+    const headers = this.getShareAuthHeaders(options?.token);
+    const response = await fetch(`${this.getApiBase()}/documents/${this.slug}/open-context`, { headers });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json() as ShareOpenContext;
+    if (!payload?.doc || !payload?.capabilities) return null;
+    if (payload.session && !this.isCollabSessionInfo(payload.session)) return null;
+    return payload;
+  }
+
+  async fetchPendingEvents(
+    after: number,
+    options?: { token?: string; limit?: number },
+  ): Promise<SharePendingEventsResponse | ShareRequestError | null> {
+    if (!this.slug) return null;
+    const params = new URLSearchParams();
+    params.set('after', String(Math.max(0, Math.trunc(after))));
+    params.set('limit', String(Math.max(1, Math.min(200, Math.trunc(options?.limit ?? 100)))));
+    const response = await fetch(`${this.getApiBase()}/agent/${this.slug}/events/pending?${params.toString()}`, {
+      headers: this.getShareAuthHeaders(options?.token),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json() as {
+      success?: boolean;
+      cursor?: number;
+      events?: Array<{
+        id?: number;
+        type?: string;
+        data?: Record<string, unknown>;
+        actor?: string | null;
+        createdAt?: string;
+        ackedAt?: string | null;
+        ackedBy?: string | null;
+      }>;
+    };
+    return {
+      success: payload.success === true,
+      cursor: typeof payload.cursor === 'number' && Number.isFinite(payload.cursor) ? payload.cursor : Math.max(0, Math.trunc(after)),
+      events: Array.isArray(payload.events)
+        ? payload.events
+          .filter((event) => typeof event?.id === 'number' && Number.isFinite(event.id) && typeof event?.type === 'string')
+          .map((event) => ({
+            id: Math.trunc(event.id as number),
+            type: String(event.type),
+            data: event?.data && typeof event.data === 'object' && !Array.isArray(event.data) ? event.data : {},
+            actor: typeof event?.actor === 'string' ? event.actor : null,
+            createdAt: typeof event?.createdAt === 'string' ? event.createdAt : '',
+            ackedAt: typeof event?.ackedAt === 'string' ? event.ackedAt : null,
+            ackedBy: typeof event?.ackedBy === 'string' ? event.ackedBy : null,
+          }))
+        : [],
+    };
+  }
+
+  async refreshCollabSession(): Promise<CollabSessionPayload | CollabUnavailablePayload | ShareRequestError | null> {
+    if (!this.slug) return null;
+    const response = await fetch(`${this.getApiBase()}/documents/${this.slug}/collab-refresh`, {
+      method: 'POST',
+      headers: this.getShareAuthHeaders(),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json() as {
+      session?: CollabSessionInfo;
+      capabilities?: { canRead: boolean; canComment: boolean; canEdit: boolean };
+      collabAvailable?: boolean;
+      snapshotUrl?: string | null;
+    };
+    if (payload?.collabAvailable === false) {
+      return {
+        collabAvailable: false,
+        snapshotUrl: payload.snapshotUrl ?? null,
+      };
+    }
+    if (!this.isCollabSessionInfo(payload.session) || !payload.capabilities) return null;
+    return payload as {
+      session: CollabSessionInfo;
+      capabilities: { canRead: boolean; canComment: boolean; canEdit: boolean };
+    };
+  }
+
+  async createAccessLink(
+    role: AccessLinkRole,
+    options?: { token?: string }
+  ): Promise<AccessLinkResponse | ShareRequestError | null> {
+    if (!this.slug) return null;
+    const response = await fetch(`${this.getApiBase()}/documents/${encodeURIComponent(this.slug)}/access-links`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getShareAuthHeaders(options?.token),
+      },
+      body: JSON.stringify({ role }),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    const accessToken = (() => {
+      if (!payload) return '';
+      if (typeof payload.accessToken === 'string' && payload.accessToken.trim().length > 0) {
+        return payload.accessToken.trim();
+      }
+      if (typeof payload.token === 'string' && payload.token.trim().length > 0) {
+        return payload.token.trim();
+      }
+      return '';
+    })();
+    const webShareUrl = (typeof payload?.webShareUrl === 'string') ? payload.webShareUrl.trim() : '';
+    if (
+      !payload
+      || payload.role !== role
+      || accessToken.length === 0
+      || webShareUrl.length === 0
+    ) {
+      return null;
+    }
+    return {
+      role,
+      accessToken,
+      token: accessToken,
+      webShareUrl,
+    };
+  }
+
+  async resolveComment(
+    markId: string,
+    by: string,
+    options?: { token?: string }
+  ): Promise<ShareMarkMutationResponse | ShareRequestError | null> {
+    if (!this.slug) return null;
+    const trimmedMarkId = typeof markId === 'string' ? markId.trim() : '';
+    const actor = typeof by === 'string' ? by.trim() : '';
+    if (!trimmedMarkId || !actor) return null;
+    const base = await this.getMutationBase(options);
+    if ('error' in base) return base;
+
+    const response = await fetch(`${this.getApiBase()}/agent/${encodeURIComponent(this.slug)}/marks/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getShareAuthHeaders(options?.token),
+      },
+      body: JSON.stringify({ markId: trimmedMarkId, by: actor, ...base }),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    return {
+      success: payload?.success === true,
+      marks: (payload?.marks && typeof payload.marks === 'object' && !Array.isArray(payload.marks))
+        ? payload.marks as Record<string, unknown>
+        : undefined,
+    };
+  }
+
+  async unresolveComment(
+    markId: string,
+    by: string,
+    options?: { token?: string }
+  ): Promise<ShareMarkMutationResponse | ShareRequestError | null> {
+    if (!this.slug) return null;
+    const trimmedMarkId = typeof markId === 'string' ? markId.trim() : '';
+    const actor = typeof by === 'string' ? by.trim() : '';
+    if (!trimmedMarkId || !actor) return null;
+    const base = await this.getMutationBase(options);
+    if ('error' in base) return base;
+
+    const response = await fetch(`${this.getApiBase()}/agent/${encodeURIComponent(this.slug)}/marks/unresolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getShareAuthHeaders(options?.token),
+      },
+      body: JSON.stringify({ markId: trimmedMarkId, by: actor, ...base }),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    return {
+      success: payload?.success === true,
+      marks: (payload?.marks && typeof payload.marks === 'object' && !Array.isArray(payload.marks))
+        ? payload.marks as Record<string, unknown>
+        : undefined,
+    };
+  }
+
+  async rejectSuggestion(
+    markId: string,
+    by: string,
+    options?: { token?: string }
+  ): Promise<ShareMarkMutationResponse | ShareRequestError | null> {
+    if (!this.slug) return null;
+    const trimmedMarkId = typeof markId === 'string' ? markId.trim() : '';
+    const actor = typeof by === 'string' ? by.trim() : '';
+    if (!trimmedMarkId || !actor) return null;
+    const base = await this.getMutationBase(options);
+    if ('error' in base) return base;
+
+    const response = await fetch(`${this.getApiBase()}/agent/${encodeURIComponent(this.slug)}/marks/reject`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getShareAuthHeaders(options?.token),
+      },
+      body: JSON.stringify({ markId: trimmedMarkId, by: actor, ...base }),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    return {
+      success: payload?.success === true,
+      marks: (payload?.marks && typeof payload.marks === 'object' && !Array.isArray(payload.marks))
+        ? payload.marks as Record<string, unknown>
+        : undefined,
+    };
+  }
+
+  async acceptSuggestion(
+    markId: string,
+    by: string,
+    options?: { token?: string }
+  ): Promise<ShareMarkMutationResponse | ShareRequestError | null> {
+    if (!this.slug) return null;
+    const trimmedMarkId = typeof markId === 'string' ? markId.trim() : '';
+    const actor = typeof by === 'string' ? by.trim() : '';
+    if (!trimmedMarkId || !actor) return null;
+    const base = await this.getMutationBase(options);
+    if ('error' in base) return base;
+
+    const response = await fetch(`${this.getApiBase()}/agent/${encodeURIComponent(this.slug)}/marks/accept`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getShareAuthHeaders(options?.token),
+      },
+      body: JSON.stringify({ markId: trimmedMarkId, by: actor, ...base }),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    return {
+      success: payload?.success === true,
+      marks: (payload?.marks && typeof payload.marks === 'object' && !Array.isArray(payload.marks))
+        ? payload.marks as Record<string, unknown>
+        : undefined,
+    };
+  }
+
+  async disconnectAgentPresence(
+    agentId: string,
+    options?: { token?: string },
+  ): Promise<boolean | ShareRequestError> {
+    if (!this.slug) return false;
+    const trimmedAgentId = typeof agentId === 'string' ? agentId.trim() : '';
+    if (!trimmedAgentId) return false;
+
+    const response = await fetch(`${this.getApiBase()}/agent/${encodeURIComponent(this.slug)}/presence/disconnect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getShareAuthHeaders(options?.token),
+      },
+      body: JSON.stringify({ agentId: trimmedAgentId }),
+    });
+    if (!response.ok) return this.parseRequestError(response);
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    return payload?.success === true && payload?.disconnected === true;
+  }
+
+  async updateTitle(
+    title: string,
+    options?: { token?: string },
+  ): Promise<boolean | ShareRequestError> {
+    const trimmedTitle = typeof title === 'string' ? title.trim() : '';
+    if (!trimmedTitle) return false;
+    const result = await this.updateDocumentTitle(trimmedTitle, options);
+    if (!result) return false;
+    if ('error' in result) return result;
+    return result.success === true;
+  }
+
+  /**
+   * Push marks update to server
+   */
+  async pushMarks(
+    marks: Record<string, unknown>,
+    actor: string,
+    options?: { keepalive?: boolean }
+  ): Promise<boolean> {
+    if (!this.slug) return false;
+
+    try {
+      const response = await fetch(`${this.getApiBase()}/documents/${this.slug}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getShareAuthHeaders(),
+        },
+        keepalive: Boolean(options?.keepalive),
+        body: JSON.stringify({ marks, actor, clientId: this.clientId }),
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('[ShareClient] Failed to push marks:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Push both content (with embedded marks) and marks metadata to server.
+   * This ensures the native app receives the full markdown with mark spans.
+   * Includes clientId so the server excludes us from the WS broadcast (echo prevention).
+   */
+  async pushUpdate(
+    markdown: string,
+    marks: Record<string, unknown>,
+    actor: string,
+    options?: { keepalive?: boolean },
+  ): Promise<boolean> {
+    if (!this.slug) return false;
+
+    try {
+      const response = await fetch(`${this.getApiBase()}/documents/${this.slug}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getShareAuthHeaders(),
+        },
+        keepalive: Boolean(options?.keepalive),
+        body: JSON.stringify({ markdown, marks, actor, clientId: this.clientId }),
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('[ShareClient] Failed to push update:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Connect WebSocket for real-time sync
+   */
+  connectWebSocket(): void {
+    if (!this.slug) return;
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+    const wsToken = this.shareToken?.trim() || '';
+    if (!wsToken) {
+      console.warn('[ShareClient] Skipping WebSocket connection because no share token is available.');
+      return;
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws?slug=${encodeURIComponent(this.slug)}&token=${encodeURIComponent(wsToken)}`;
+
+    this.ws = new WebSocket(wsUrl);
+
+    this.ws.onopen = () => {
+      console.log('[ShareClient] WebSocket connected');
+      this.reconnectDelay = 1000;
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        if (message.type === 'connected') {
+          this.clientId = message.clientId;
+          console.log('[ShareClient] Assigned clientId:', this.clientId);
+          // Identify ourselves to the server and advertise bridge capability.
+          this.send({
+            type: 'viewer.identify',
+            name: this.viewerName ?? 'Anonymous',
+            capabilities: { bridge: true },
+          });
+          return;
+        }
+
+        if (message.type === 'bridge.request') {
+          void this.handleBridgeRequest(message);
+          return;
+        }
+
+        // Ignore our own messages (echo prevention)
+        if (message.sourceClientId === this.clientId) return;
+
+        for (const handler of this.eventHandlers) {
+          handler(message);
+        }
+      } catch {
+        // ignore malformed messages
+      }
+    };
+
+    this.ws.onclose = () => {
+      console.log('[ShareClient] WebSocket disconnected');
+      this.scheduleReconnect();
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('[ShareClient] WebSocket error:', error);
+    };
+  }
+
+  private async handleBridgeRequest(message: Record<string, unknown>): Promise<void> {
+    const requestId = typeof message.requestId === 'string' ? message.requestId : null;
+    const method = typeof message.method === 'string' ? message.method : null;
+    const path = typeof message.path === 'string' ? message.path : null;
+    const body = (typeof message.body === 'object' && message.body !== null && !Array.isArray(message.body))
+      ? message.body as Record<string, unknown>
+      : {};
+
+    if (!requestId || !method || !path) {
+      return;
+    }
+
+    try {
+      const result = await executeBridgeCall(method, path, body);
+      this.send({
+        type: 'bridge.response',
+        requestId,
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      const errorDetails = (typeof error === 'object' && error !== null && !Array.isArray(error))
+        ? error as Record<string, unknown>
+        : {};
+      const messageText = error instanceof Error ? error.message : String(error);
+      this.send({
+        type: 'bridge.response',
+        requestId,
+        ok: false,
+        error: {
+          code: typeof errorDetails.code === 'string' ? errorDetails.code : 'EXECUTION_ERROR',
+          message: messageText || 'Bridge execution failed',
+          status: typeof errorDetails.status === 'number' ? errorDetails.status : 400,
+          hint: errorDetails.hint,
+          hints: errorDetails.hints,
+          nextSteps: errorDetails.nextSteps,
+          retryable: errorDetails.retryable,
+        },
+      });
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
+    this.reconnectTimer = setTimeout(() => {
+      console.log('[ShareClient] Attempting reconnect...');
+      this.connectWebSocket();
+    }, this.reconnectDelay);
+
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
+  }
+
+  /**
+   * Send a message through WebSocket
+   */
+  send(message: Record<string, unknown>): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[ShareClient] WebSocket not connected, cannot send');
+      return;
+    }
+    this.ws.send(JSON.stringify(message));
+  }
+
+  /**
+   * Register handler for incoming WebSocket messages
+   */
+  onMessage(handler: ShareEventHandler): () => void {
+    this.eventHandlers.push(handler);
+    return () => {
+      this.eventHandlers = this.eventHandlers.filter((entry) => entry !== handler);
+    };
+  }
+
+  reportCollabReconnect(durationMs: number, source: string = 'web'): void {
+    if (!Number.isFinite(durationMs) || durationMs < 0) return;
+    this.postMetric('collab-reconnect', {
+      durationMs,
+      source,
+    });
+  }
+
+  reportMarkAnchorResolution(result: 'success' | 'failure', source: string = 'web'): void {
+    this.postMetric('mark-anchor', {
+      result,
+      source,
+    });
+  }
+
+  /**
+   * Disconnect WebSocket
+   */
+  disconnect(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.onclose = null; // prevent reconnect
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+}
+
+// Export singleton
+export const shareClient = new ShareClient();

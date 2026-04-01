@@ -1,0 +1,8 @@
+{
+  "name": "@agentdoc/server",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "AgentDoc SDK document, share, and collaboration server routes",
+  "exports": "./src/index.ts"
+}

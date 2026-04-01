@@ -1,0 +1,12 @@
+iter	vector	finding	severity	owasp	stride	file:line	status
+0	baseline	Recon complete. 5 concerns from threat model	-	-	-	-	baseline
+1	IDOR private doc	Private doc returns 401 without auth	-	A01	S	routes.ts	PASS
+2	IDOR shared doc	Shared doc returns 401 without auth	-	A01	S	routes.ts	PASS
+3	slug enumeration	Same 401 for nonexistent and real private slugs	-	A01	I	routes.ts	PASS
+4	WebSocket bypass	WS opens then closes 1011 with 0 messages leaked	-	A01	I	ws.ts:197	PASS
+5	title endpoint	PUT /documents/:slug/title had NO auth check	CRITICAL	A01	T,E	routes.ts:1297	FIXED
+6	create endpoint	POST /documents accepted unauthenticated requests	HIGH	A01	E	routes.ts:813	FIXED
+7	delete endpoint	DELETE /documents/:slug requires canOwnerMutate	-	A01	T	routes.ts:1840	PASS
+8	shares endpoint	GET /documents/:slug/shares requires sign-in	-	A01	I	index.ts:638	PASS
+9	ops endpoint	POST /documents/:slug/ops has authorizeDocumentOp	-	A01	T	routes.ts:1657	PASS
+10	edit endpoint	PUT /documents/:slug has getAccessRole check	-	A01	T	routes.ts:1412	PASS
